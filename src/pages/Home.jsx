@@ -100,6 +100,11 @@ function Home() {
     await removeMovie(user.uid, movieId);
   }
 
+  async function moveMovie(movie, newStatus) {
+    if (!user?.uid) return;
+    await upsertMovie(user.uid, { ...movie, status: newStatus });
+  }
+
   async function handleDeleteAccount() {
     if (!user?.uid) return;
 
@@ -193,8 +198,11 @@ function Home() {
     );
   }
 
-  function renderMovieCardFromFirestore(m) {
+  function renderMovieCardFromFirestore(m, context) {
     const poster = m.posterPath ? getPosterUrl(m.posterPath) : null;
+
+    const isToWatch = context === "toWatch";
+    const isWatched = context === "watched";
 
     return (
       <div className="card" key={m.id}>
@@ -211,6 +219,26 @@ function Home() {
           <div className="muted">{m.year || "—"}</div>
 
           <div className="actions">
+            {isToWatch && (
+              <button
+                className="btn btn-secondary btn-small"
+                type="button"
+                onClick={() => moveMovie(m, "watched")}
+              >
+                ✓ Watched
+              </button>
+            )}
+
+            {isWatched && (
+              <button
+                className="btn btn-secondary btn-small"
+                type="button"
+                onClick={() => moveMovie(m, "toWatch")}
+              >
+                + To Watch
+              </button>
+            )}
+
             <button
               className="btn btn-secondary btn-small"
               type="button"
@@ -312,7 +340,7 @@ function Home() {
             <p className="muted">No movies yet.</p>
           ) : (
             <div className="grid">
-              {toWatch.map(renderMovieCardFromFirestore)}
+              {toWatch.map((m) => renderMovieCardFromFirestore(m, "toWatch"))}
             </div>
           )}
         </>
@@ -326,7 +354,7 @@ function Home() {
             <p className="muted">No movies yet.</p>
           ) : (
             <div className="grid">
-              {watched.map(renderMovieCardFromFirestore)}
+              {watched.map((m) => renderMovieCardFromFirestore(m, "watched"))}
             </div>
           )}
         </>

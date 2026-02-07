@@ -2,10 +2,8 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-const API_KEY = import.meta.env.VITE_FIREBASE_API_KEY;
-
 const firebaseConfig = {
-  apiKey: API_KEY,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "movie-watchlist-d2dd8.firebaseapp.com",
   projectId: "movie-watchlist-d2dd8",
   storageBucket: "movie-watchlist-d2dd8.firebasestorage.app",

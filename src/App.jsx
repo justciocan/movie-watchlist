@@ -7,7 +7,6 @@ function App() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) return null;
-
   return (
     <BrowserRouter>
       <Routes>

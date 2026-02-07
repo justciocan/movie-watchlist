@@ -1,12 +1,12 @@
 import {
   doc,
   setDoc,
+  getDocs,
   deleteDoc,
   serverTimestamp,
   collection,
   query,
   onSnapshot,
-  orderBy,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
@@ -15,7 +15,7 @@ function userMoviesCollection(uid) {
 }
 
 export function subscribeToUserMovies(uid, callback) {
-  const q = query(userMoviesCollection(uid), orderBy("updatedAt", "desc"));
+  const q = query(userMoviesCollection(uid));
   return onSnapshot(q, (snap) => {
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     callback(items);
@@ -39,4 +39,14 @@ export async function upsertMovie(uid, movie) {
 export function removeMovie(uid, movieId) {
   const ref = doc(db, "users", uid, "movies", String(movieId));
   return deleteDoc(ref);
+}
+
+export async function deleteAllUserMovies(uid) {
+  const ref = collection(db, "users", uid, "movies");
+  const snap = await getDocs(ref);
+
+  const deletes = snap.docs.map((d) =>
+    deleteDoc(doc(db, "users", uid, "movies", d.id)),
+  );
+  await Promise.all(deletes);
 }

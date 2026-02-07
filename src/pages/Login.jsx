@@ -90,6 +90,7 @@ function Login() {
               minLength={6}
             />
           </label>
+
           {mode === "signup" && (
             <label className="auth-label">
               Confirm Password

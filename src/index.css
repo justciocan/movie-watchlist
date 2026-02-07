@@ -130,11 +130,6 @@ p {
   font: inherit;
 }
 
-.auth-forgot {
-  margin-top: -0.25rem;
-  text-align: left;
-}
-
 /* App UI */
 .topbar {
   display: flex;
@@ -213,8 +208,28 @@ p {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 1rem;
+}
+
+/* Mobile */
+@media (max-width: 599px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablet */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
 
 .card {
@@ -222,6 +237,8 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .poster img {
@@ -239,11 +256,23 @@ p {
 
 .card-body {
   padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* allows footer to stick to bottom */
+}
+
+.card-footer {
+  margin-top: auto; /* pushes buttons down */
+  padding: 1rem 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .card-title {
   font-weight: 700;
   margin-bottom: 0.25rem;
+  min-height: 2.4em; /* keeps titles visually aligned */
 }
 
 .section-title {
@@ -251,25 +280,24 @@ p {
 }
 
 .actions {
+  margin-top: auto;
+  padding-top: 0.75rem;
   display: flex;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+}
+
+.actions .btn {
+  flex: 1; /* 👈 makes both buttons same width */
+  justify-content: center;
 }
 
 .btn-small {
-  padding: 0.5rem 0.6rem;
-  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
   font-size: 0.85rem;
 }
 
-.badge {
-  margin-top: 0.75rem;
-  display: inline-block;
-  padding: 0.25rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  font-size: 0.8rem;
-  opacity: 0.9;
+.btn-selected {
+  outline: 2px solid rgba(96, 165, 250, 0.8);
 }
 
 .lists {
@@ -301,4 +329,44 @@ p {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   margin-bottom: 0.6rem;
+}
+
+.poster {
+  aspect-ratio: 2 / 3;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+
+.tab {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tab-active {
+  border-color: rgba(96, 165, 250, 0.8);
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fecaca;
 }

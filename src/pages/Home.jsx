@@ -1,23 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
-import { logout } from "../services/auth";
+import {
+  logout,
+  deleteAccount,
+  reauthWithGoogle,
+  reauthWithPassword,
+} from "../services/auth";
 import { searchMovies, getPopularMovies, getPosterUrl } from "../services/tmdb";
 import {
   subscribeToUserMovies,
   upsertMovie,
   removeMovie,
+  deleteAllUserMovies,
 } from "../services/watchlist";
 
 function Home() {
   const { user } = useAuth();
 
+  const [activeTab, setActiveTab] = useState("search"); // "search" | "toWatch" | "watched"
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const [saved, setSaved] = useState([]);
 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Subscribe to user's saved movies (Firestore)
   useEffect(() => {
     if (!user?.uid) return;
     const unsub = subscribeToUserMovies(user.uid, setSaved);
@@ -25,15 +35,24 @@ function Home() {
   }, [user?.uid]);
 
   const savedMap = useMemo(() => {
-    const m = new Map();
-    saved.forEach((x) => m.set(String(x.id), x));
-    return m;
+    const map = new Map();
+    saved.forEach((x) => map.set(String(x.id), x));
+    return map;
   }, [saved]);
 
-  const toWatch = saved.filter((m) => m.status === "toWatch");
-  const watched = saved.filter((m) => m.status === "watched");
+  const toWatch = useMemo(
+    () => saved.filter((m) => m.status === "toWatch"),
+    [saved],
+  );
+  const watched = useMemo(
+    () => saved.filter((m) => m.status === "watched"),
+    [saved],
+  );
 
+  // Load popular movies when Search tab is used initially
   useEffect(() => {
+    if (activeTab !== "search") return;
+
     (async () => {
       setError("");
       setIsLoading(true);
@@ -46,7 +65,7 @@ function Home() {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [activeTab]);
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -81,6 +100,130 @@ function Home() {
     await removeMovie(user.uid, movieId);
   }
 
+  async function handleDeleteAccount() {
+    if (!user?.uid) return;
+
+    const ok = window.confirm(
+      "This will permanently delete your account and all your movies. This cannot be undone.\n\nAre you sure?",
+    );
+    if (!ok) return;
+
+    try {
+      // Try delete normally first
+      await deleteAllUserMovies(user.uid);
+      await deleteAccount();
+      return;
+    } catch (err) {
+      // If Firebase requires recent login, re-auth then retry
+      if (err?.code === "auth/requires-recent-login") {
+        try {
+          const providers = user?.providerData?.map((p) => p.providerId) || [];
+
+          if (providers.includes("google.com")) {
+            await reauthWithGoogle();
+          } else if (providers.includes("password")) {
+            const pw = window.prompt(
+              "Please re-enter your password to confirm account deletion:",
+            );
+            if (!pw) return; // user cancelled
+            await reauthWithPassword(pw);
+          } else {
+            alert(
+              "Please log out and log back in, then try deleting your account again.",
+            );
+            return;
+          }
+
+          // Retry after re-auth
+          await deleteAllUserMovies(user.uid);
+          await deleteAccount();
+          return;
+        } catch (reauthErr) {
+          alert(reauthErr?.message || "Re-authentication failed");
+          return;
+        }
+      }
+
+      alert(err?.message || "Account deletion failed");
+    }
+  }
+
+  function renderMovieCardFromTmdb(m) {
+    const poster = getPosterUrl(m.poster_path);
+    const year = m.release_date ? m.release_date.slice(0, 4) : "—";
+
+    const isSaved = savedMap.has(String(m.id));
+    const savedStatus = isSaved ? savedMap.get(String(m.id))?.status : null;
+
+    return (
+      <div className="card" key={m.id}>
+        <div className="poster">
+          {poster ? (
+            <img src={poster} alt={m.title} />
+          ) : (
+            <div className="poster-fallback">No image</div>
+          )}
+        </div>
+
+        <div className="card-body">
+          <div className="card-title">{m.title}</div>
+          <div className="muted">{year}</div>
+
+          <div className="actions">
+            <button
+              className={`btn btn-secondary btn-small ${savedStatus === "toWatch" ? "btn-selected" : ""}`}
+              type="button"
+              onClick={() => saveMovie(m, "toWatch")}
+              disabled={savedStatus === "toWatch"}
+            >
+              + To Watch
+            </button>
+
+            <button
+              className={`btn btn-secondary btn-small ${savedStatus === "watched" ? "btn-selected" : ""}`}
+              type="button"
+              onClick={() => saveMovie(m, "watched")}
+              disabled={savedStatus === "watched"}
+            >
+              ✓ Watched
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderMovieCardFromFirestore(m) {
+    const poster = m.posterPath ? getPosterUrl(m.posterPath) : null;
+
+    return (
+      <div className="card" key={m.id}>
+        <div className="poster">
+          {poster ? (
+            <img src={poster} alt={m.title} />
+          ) : (
+            <div className="poster-fallback">No image</div>
+          )}
+        </div>
+
+        <div className="card-body">
+          <div className="card-title">{m.title}</div>
+          <div className="muted">{m.year || "—"}</div>
+
+          <div className="actions">
+            <button
+              className="btn btn-secondary btn-small"
+              type="button"
+              onClick={() => handleRemove(m.id)}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       <div className="topbar">
@@ -91,119 +234,103 @@ function Home() {
           </p>
         </div>
 
-        <button className="btn btn-secondary" type="button" onClick={logout}>
-          Logout
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button className="btn btn-secondary" onClick={logout}>
+            Logout
+          </button>
+
+          <button
+            className="btn btn-danger"
+            onClick={handleDeleteAccount}
+            title="Delete account permanently"
+          >
+            Delete Account
+          </button>
+        </div>
       </div>
 
-      <form className="searchbar" onSubmit={handleSearch}>
-        <input
-          className="input"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search movies..."
-        />
-        <button className="btn btn-primary" type="submit" disabled={isLoading}>
+      {/* Tabs */}
+      <div className="tabs">
+        <button
+          className={`tab ${activeTab === "search" ? "tab-active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("search")}
+        >
           Search
         </button>
-      </form>
 
-      {error && <div className="notice notice-error">{error}</div>}
-      {isLoading && <div className="notice">Loading...</div>}
+        <button
+          className={`tab ${activeTab === "toWatch" ? "tab-active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("toWatch")}
+        >
+          To Watch ({toWatch.length})
+        </button>
 
-      <h2 className="section-title">Results</h2>
-      <div className="grid">
-        {results.map((m) => {
-          const poster = getPosterUrl(m.poster_path);
-          const year = m.release_date ? m.release_date.slice(0, 4) : "—";
-          const isSaved = savedMap.has(String(m.id));
-          const savedStatus = isSaved
-            ? savedMap.get(String(m.id))?.status
-            : null;
-
-          return (
-            <div className="card" key={m.id}>
-              <div className="poster">
-                {poster ? (
-                  <img src={poster} alt={m.title} />
-                ) : (
-                  <div className="poster-fallback">No image</div>
-                )}
-              </div>
-              <div className="card-body">
-                <div className="card-title">{m.title}</div>
-                <div className="muted">{year}</div>
-
-                <div className="actions">
-                  <button
-                    className="btn btn-secondary btn-small"
-                    type="button"
-                    onClick={() => saveMovie(m, "toWatch")}
-                    disabled={savedStatus === "toWatch"}
-                  >
-                    + To Watch
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    type="button"
-                    onClick={() => saveMovie(m, "watched")}
-                    disabled={savedStatus === "watched"}
-                  >
-                    ✓ Watched
-                  </button>
-                </div>
-
-                {isSaved && <div className="badge">Saved: {savedStatus}</div>}
-              </div>
-            </div>
-          );
-        })}
+        <button
+          className={`tab ${activeTab === "watched" ? "tab-active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("watched")}
+        >
+          Watched ({watched.length})
+        </button>
       </div>
 
-      <div className="lists">
-        <div>
-          <h2 className="section-title">To Watch ({toWatch.length})</h2>
+      {/* SEARCH TAB */}
+      {activeTab === "search" && (
+        <>
+          <form className="searchbar" onSubmit={handleSearch}>
+            <input
+              className="input"
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search movies..."
+            />
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={isLoading}
+            >
+              Search
+            </button>
+          </form>
+
+          {error && <div className="notice notice-error">{error}</div>}
+          {isLoading && <div className="notice">Loading...</div>}
+
+          <h2 className="section-title">Results</h2>
+          <div className="grid">{results.map(renderMovieCardFromTmdb)}</div>
+        </>
+      )}
+
+      {/* TO WATCH TAB */}
+      {activeTab === "toWatch" && (
+        <>
+          <h2 className="section-title">To Watch</h2>
           {toWatch.length === 0 ? (
             <p className="muted">No movies yet.</p>
           ) : (
-            <ul className="list">
-              {toWatch.map((m) => (
-                <li key={m.id} className="list-item">
-                  <span>{m.title}</span>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => handleRemove(m.id)}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="grid">
+              {toWatch.map(renderMovieCardFromFirestore)}
+            </div>
           )}
-        </div>
+        </>
+      )}
 
-        <div>
-          <h2 className="section-title">Watched ({watched.length})</h2>
+      {/* WATCHED TAB */}
+      {activeTab === "watched" && (
+        <>
+          <h2 className="section-title">Watched</h2>
           {watched.length === 0 ? (
             <p className="muted">No movies yet.</p>
           ) : (
-            <ul className="list">
-              {watched.map((m) => (
-                <li key={m.id} className="list-item">
-                  <span>{m.title}</span>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => handleRemove(m.id)}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="grid">
+              {watched.map(renderMovieCardFromFirestore)}
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
